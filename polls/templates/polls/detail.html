@@ -1,0 +1,54 @@
+{% extends 'polls/base.html' %}
+{% block content %}
+<h1>{{ question.question_text }}</h1>
+
+{% if error_message %}<p><strong>{{ error_message }}</strong></p>{% endif %}
+
+<form action="{% url 'polls:vote' question.id %}" method="post">
+{% csrf_token %}
+{% for choice in question.choice_set.all %}
+    <input type="radio" name="choice" id="choice{{ forloop.counter }}"
+        value="{{ choice.id }}" required>
+    <label for="choice{{ forloop.counter }}">{{ choice.choice_text }}</label><br>
+{% endfor %}
+<input type="submit" value="Vote">
+</form>
+<p><a href="{% url "polls:index" %}">Back to list of polls</a></p>
+<script>
+function saveData(data, post_url) {
+    return new Promise(function(resolve, reject) {
+        var db = window.indexedDB.open("votes");
+        db.onupgradeneeded = function(event) {
+            var db = event.target.result;
+            var store = db.createObjectStore("votes", { autoIncrement: true });
+        }
+        db.onsuccess = function(event) {
+            var store = this.result.transaction('votes', 'readwrite').objectStore('votes');
+            store.add({url: post_url, data: data});
+            resolve();
+        }
+        db.onerror = function(err) { reject(err); }
+    })
+}
+
+if (navigator.serviceWorker) {
+    navigator.serviceWorker.ready.then(function(registration) {
+        if (registration.sync && window.URLSearchParams && window.FormData) {
+            var frm = document.querySelector("form")
+            frm.addEventListener("submit", function(e) {
+                e.preventDefault();
+                saveData(new URLSearchParams(new FormData(frm)).toString(),
+                    "{% url 'polls:vote' question.id %}")
+                    .then(function() {
+                        return registration.sync.register('votes-post');
+                    }).then(function() {
+                        location.href = "{% url 'polls:results' question.id %}";
+                    }).catch(function(err) {
+                        console.error(err);
+                    })
+            }, false);
+        }
+    })
+}
+</script>
+{% endblock %}
